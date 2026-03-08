@@ -3801,10 +3801,45 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RB, LJ_TISTRUECOND
     if (op == BC_IST || op == BC_ISTC) {
       |  jae >1
+      |.if DUALNUM
+      |  cmp RB, LJ_TISNUM
+      |  jne >8
+      |  cmp dword [BASE+RD*8], 0
+      |  je >1
+      |  jmp >9
+      |8:
+      |  ja >9
+      |.else
+      |  jae >9
+      |.endif
+      |  mov RB, [BASE+RD*8+4]
+      |  add RB, RB
+      |  or RB, [BASE+RD*8]
+      |  jz >1
+      |9:
     } else {
-      |  jb >1
+      |  jb >7
+      |  jmp >9
+      |7:
+      |.if DUALNUM
+      |  cmp RB, LJ_TISNUM
+      |  jne >8
+      |  cmp dword [BASE+RD*8], 0
+      |  je >9
+      |  jmp >1
+      |8:
+      |  ja >1
+      |.else
+      |  jae >1
+      |.endif
+      |  mov RB, [BASE+RD*8+4]
+      |  add RB, RB
+      |  or RB, [BASE+RD*8]
+      |  jnz >1
+      |9:
     }
     if (op == BC_ISTC || op == BC_ISFC) {
+      |  mov RB, [BASE+RD*8+4]
       |  mov [BASE+RA*8+4], RB
       |  mov RB, [BASE+RD*8]
       |  mov [BASE+RA*8], RB

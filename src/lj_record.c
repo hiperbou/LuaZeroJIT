@@ -2422,10 +2422,16 @@ void lj_record_ins(jit_State *J)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC:
-    if ((op & 1) == tref_istruecond(rc))
+    if ((op & 1) == tvistruecond(rcv))
       rc = 0;  /* Don't store if condition is not true. */
     /* fallthrough */
-  case BC_IST: case BC_ISF:  /* Type specialization suffices. */
+  case BC_IST: case BC_ISF:
+    if (tref_isnumber(rc)) {
+      if (tref_isinteger(rc))
+        emitir(IRTG(tvistruecond(rcv) ? IR_NE : IR_EQ, IRT_INT), rc, lj_ir_kint(J, 0));
+      else
+        emitir(IRTG(tvistruecond(rcv) ? IR_NE : IR_EQ, IRT_NUM), rc, lj_ir_knum_zero(J));
+    }
     if (bc_a(pc[1]) < J->maxslot)
       J->maxslot = bc_a(pc[1]);  /* Shrink used slots. */
     break;

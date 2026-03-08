@@ -3214,8 +3214,42 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp ITYPEd, LJ_TISTRUECOND
     if (op == BC_IST || op == BC_ISTC) {
       |  jae >1
+      |.if DUALNUM
+      |  cmp ITYPEd, LJ_TISNUM
+      |  jne >8
+      |  mov ITYPE, [BASE+RD*8]
+      |  test ITYPEd, ITYPEd
+      |  je >1
+      |  jmp >9
+      |8:
+      |  ja >9
+      |.else
+      |  jae >9
+      |.endif
+      |  mov ITYPE, [BASE+RD*8]
+      |  add ITYPE, ITYPE
+      |  jz >1
+      |9:
     } else {
-      |  jb >1
+      |  jb >7
+      |  jmp >9
+      |7:
+      |.if DUALNUM
+      |  cmp ITYPEd, LJ_TISNUM
+      |  jne >8
+      |  mov ITYPE, [BASE+RD*8]
+      |  test ITYPEd, ITYPEd
+      |  je >9
+      |  jmp >1
+      |8:
+      |  ja >1
+      |.else
+      |  jae >1
+      |.endif
+      |  mov ITYPE, [BASE+RD*8]
+      |  add ITYPE, ITYPE
+      |  jnz >1
+      |9:
     }
     if (op == BC_ISTC || op == BC_ISFC) {
       |  mov [BASE+RA*8], RB
