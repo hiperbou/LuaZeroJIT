@@ -2426,7 +2426,7 @@ void lj_record_ins(jit_State *J)
     if (tref_isnumber(rc)) {
       TRef zero = tref_isint(rc) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
       rec_comp_prep(J);
-      emitir(IRTG((op & 1) ? IR_NE : IR_EQ, tref_isint(rc) ? IRT_INT : IRT_NUM), rc, zero);
+      emitir(IRTG((op & 1) ? IR_EQ : IR_NE, tref_isint(rc) ? IRT_INT : IRT_NUM), rc, zero);
       if (op == BC_ISTC || op == BC_ISFC) {
 	if ((op & 1) == tref_istruecond(rc))
 	  rc = 0;
@@ -2460,9 +2460,7 @@ void lj_record_ins(jit_State *J)
     if (tref_isnumber(rc)) {
       TRef zero = tref_isint(rc) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
       rc = emitir(IRT(IR_EQ, IRT_INT), rc, zero);
-      rc = emitir(IRT(IR_CONV, IRT_TRUE), rc, IRCONV_INT_NUM|IRCONV_CHECK);
-      /* This is a bit hacky, but NOT normally doesn't emit IR. */
-      /* If we are here, we want the boolean result of (rc == 0). */
+      /* Result is 1 (True) if equal to zero, 0 (False) otherwise. */
     } else {
       rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
     }
