@@ -3235,37 +3235,33 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPE, RB
     |  sar ITYPE, 47
     |  cmp ITYPEd, LJ_TFALSE
-    |  jae >2			// NIL/FALSE -> False
-    |  mov64 RA, 0x7fffffffffffffff
-    |  and RA, RB
-    |  jz >2			// +0.0 or -0.0 -> False
+    |  jae >5			// NIL/FALSE -> falsy
+    |  mov64 ITYPE, 0x7fffffffffffffff
+    |  and ITYPE, RB
+    |  jz >5			// +0.0 or -0.0 -> falsy
     |  mov ITYPE, RB
     |  sar ITYPE, 47
     |  cmp ITYPEd, LJ_TISNUM
-    |  jne >1			// Not zero number -> True
+    |  jne >4			// Not zero number -> truthy
     |  test RBd, RBd
-    |  jz >2			// Integer 0 -> False
-    |1: // True
+    |  jz >5			// Integer 0 -> falsy
+    |4: // truthy
     if (op == BC_IST || op == BC_ISTC) {
-      if (op == BC_ISTC) {
-	|  movzx RAd, PC_RA
-	|  mov [BASE+RA*8], RB
-      }
-      |  movzx RDd, PC_RD
-      |  branchPC RD
-      |  ins_next
+      |  jmp >1
     }
     |  ins_next
-    |2: // False
+    |5: // falsy
     if (op == BC_ISF || op == BC_ISFC) {
-      if (op == BC_ISFC) {
-	|  movzx RAd, PC_RA
-	|  mov [BASE+RA*8], RB
-      }
-      |  movzx RDd, PC_RD
-      |  branchPC RD
-      |  ins_next
+      |  jmp >1
     }
+    |  ins_next
+    |1: // condition met
+    if (op == BC_ISTC || op == BC_ISFC) {
+      |  movzx RAd, PC_RA
+      |  mov [BASE+RA*8], RB
+    }
+    |  movzx RDd, PC_RD
+    |  branchPC RD
     |  ins_next
     break;
 

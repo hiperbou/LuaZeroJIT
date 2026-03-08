@@ -1479,12 +1479,12 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.ffunc_1 assert
   |  mov RB, [BASE+4]	// MSW
-  |  mov RC, [BASE]	// LSW
+|  mov RA, [BASE]	// LSW
   |  cmp RB, LJ_TFALSE
   |  jae ->fff_fallback		// NIL/FALSE -> False
   |  cmp RB, LJ_TISNUM
   |  ja >1			// Object -> True
-  |  test RC, RC
+|  test RA, RA
   |  jnz >1			// LSW != 0 -> True
   |  test RB, 0x7fffffff
   |  jz ->fff_fallback		// 0.0 or -0.0 -> False
@@ -1494,7 +1494,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov PC, [BASE-4]
   |  mov MULTRES, RD
   |  mov [BASE-4], RB
-  |  mov [BASE-8], RC
+|  mov [BASE-8], RA
   |  sub RD, 2
   |  jz >2
   |  mov RA, BASE
@@ -3834,36 +3834,33 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RD, [BASE+RD*8]	// LSW
     |  add PC, 4
     |  cmp RB, LJ_TFALSE
-    |  jae >2			// NIL/FALSE -> False
+    |  jae >5			// NIL/FALSE -> falsy
     |  cmp RB, LJ_TISNUM
-    |  ja >1			// Object -> True
+    |  ja >4			// Object -> truthy
     |  test RD, RD
-    |  jnz >1			// LSW != 0 -> True
+    |  jnz >4			// LSW != 0 -> truthy
     |  test RB, 0x7fffffff
-    |  jz >2			// 0.0 or -0.0 -> False
+    |  jz >5			// 0.0 or -0.0 -> falsy
     |  cmp RB, LJ_TISNUM
-    |  je >2			// Integer 0 -> False
-    |1: // True
+    |  je >5			// Integer 0 -> falsy
+    |4: // truthy
     if (op == BC_IST || op == BC_ISTC) {
-      if (op == BC_ISTC) {
-	|  mov [BASE+RA*8+4], RB
-	|  mov [BASE+RA*8], RD
-      }
-      |  movzx RD, PC_RD
-      |  branchPC RD
-      |  ins_next
+      |  jmp >1
     }
     |  ins_next
-    |2: // False
+    |5: // falsy
     if (op == BC_ISF || op == BC_ISFC) {
-      if (op == BC_ISFC) {
-	|  mov [BASE+RA*8+4], RB
-	|  mov [BASE+RA*8], RD
-      }
-      |  movzx RD, PC_RD
-      |  branchPC RD
-      |  ins_next
+      |  jmp >1
     }
+    |  ins_next
+    |1: // condition met
+    if (op == BC_ISTC || op == BC_ISFC) {
+      |  movzx RA, PC_RA
+      |  mov [BASE+RA*8+4], RB
+      |  mov [BASE+RA*8], RD
+    }
+    |  movzx RD, PC_RD
+    |  branchPC RD
     |  ins_next
     break;
 
@@ -3915,6 +3912,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RB, LJ_TTRUE
     |3:
     |  mov [BASE+RA*8+4], RB
+    |  mov dword [BASE+RA*8], 0
     |  ins_next
     break;
   case BC_UNM:

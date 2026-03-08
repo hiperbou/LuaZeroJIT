@@ -956,6 +956,13 @@ static void bcemit_unop(FuncState *fs, BCOp op, ExpDesc *e)
     if (e->k == VKNIL || e->k == VKFALSE) {
       e->k = VKTRUE;
       return;
+    } else if (e->k == VKNUM) {
+      if (tviszero(&e->u.nval)) {
+	e->k = VKTRUE;
+      } else {
+	e->k = VKFALSE;
+      }
+      return;
     } else if (expr_isk(e) || (LJ_HASFFI && e->k == VKCDATA)) {
       e->k = VKFALSE;
       return;
