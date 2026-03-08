@@ -522,7 +522,10 @@ typedef uint32_t TRef;
 
 #define tref_isbool(tr)		(tref_typerange((tr), IRT_FALSE, IRT_TRUE))
 #define tref_ispri(tr)		(tref_typerange((tr), IRT_NIL, IRT_TRUE))
-#define tref_istruecond(tr)	(!tref_typerange((tr), IRT_NIL, IRT_FALSE))
+#define tref_istruecond(tr)	(!tref_typerange((tr), IRT_NIL, IRT_FALSE) && \
+				 !(tref_isnumber(tr) && tref_isk(tr) && \
+				   (tref_isint(tr) ? (IR(tref_ref(tr))->i == 0) : \
+						     (ir_knum(IR(tref_ref(tr)))->n == 0))))
 #define tref_isinteger(tr)	(tref_typerange((tr), IRT_I8, IRT_INT))
 #define tref_isnumber(tr)	(tref_typerange((tr), IRT_NUM, IRT_INT))
 #define tref_isnumber_str(tr)	(tref_isnumber((tr)) || tref_isstr((tr)))

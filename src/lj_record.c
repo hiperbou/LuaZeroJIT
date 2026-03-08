@@ -2422,10 +2422,21 @@ void lj_record_ins(jit_State *J)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC:
-    if ((op & 1) == tref_istruecond(rc))
-      rc = 0;  /* Don't store if condition is not true. */
-    /* fallthrough */
-  case BC_IST: case BC_ISF:  /* Type specialization suffices. */
+  case BC_IST: case BC_ISF:
+    if (tref_isnumber(rc)) {
+      TRef zero = tref_isint(rc) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
+      rec_comp_prep(J);
+      emitir(IRTG((op & 1) ? IR_NE : IR_EQ, tref_isint(rc) ? IRT_INT : IRT_NUM), rc, zero);
+      if (op == BC_ISTC || op == BC_ISFC) {
+	if ((op & 1) == tref_istruecond(rc))
+	  rc = 0;
+      }
+    } else {
+      if (op == BC_ISTC || op == BC_ISFC) {
+	if ((op & 1) == tref_istruecond(rc))
+	  rc = 0;  /* Don't store if condition is not true. */
+      }
+    }
     if (bc_a(pc[1]) < J->maxslot)
       J->maxslot = bc_a(pc[1]);  /* Shrink used slots. */
     break;
@@ -2446,7 +2457,15 @@ void lj_record_ins(jit_State *J)
 
   case BC_NOT:
     /* Type specialization already forces const result. */
-    rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
+    if (tref_isnumber(rc)) {
+      TRef zero = tref_isint(rc) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
+      rc = emitir(IRT(IR_EQ, IRT_INT), rc, zero);
+      rc = emitir(IRT(IR_CONV, IRT_TRUE), rc, IRCONV_INT_NUM|IRCONV_CHECK);
+      /* This is a bit hacky, but NOT normally doesn't emit IR. */
+      /* If we are here, we want the boolean result of (rc == 0). */
+    } else {
+      rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
+    }
     break;
 
   case BC_LEN:

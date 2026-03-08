@@ -1170,13 +1170,27 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_condt:			// BASE = base, RC = result
   |  add PC, 4
-  |  cmp dword [RC+4], LJ_TISTRUECOND	// Branch if result is true.
-  |  jb <5
+  |  mov RB, [RC+4]
+  |  mov RD, [RC]
+  |  cmp RB, LJ_TFALSE; jae >1
+  |  test RD, RD; jnz <5
+  |  test RB, RB; jz >1
+  |  cmp RB, 0x80000000; jz >1
+  |  cmp RB, LJ_TISNUM; jz >1
+  |  jmp <5
+  |1:
   |  jmp <6
   |
   |->cont_condf:			// BASE = base, RC = result
-  |  cmp dword [RC+4], LJ_TISTRUECOND	// Branch if result is false.
-  |  jmp <4
+  |  mov RB, [RC+4]
+  |  mov RD, [RC]
+  |  cmp RB, LJ_TFALSE; jae <4
+  |  test RD, RD; jnz >1
+  |  test RB, RB; jz <4
+  |  cmp RB, 0x80000000; jz <4
+  |  cmp RB, LJ_TISNUM; jz <4
+  |1:
+  |  jmp <6
   |
   |->vmeta_equal:
   |  sub PC, 4
@@ -1455,12 +1469,19 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.ffunc_1 assert
   |  mov RB, [BASE+4]
-  |  cmp RB, LJ_TISTRUECOND;  jae ->fff_fallback
+  |  mov RD, [BASE]
+  |  cmp RB, LJ_TFALSE; jae ->fff_fallback
+  |  test RD, RD; jnz >1
+  |  test RB, RB; jz ->fff_fallback
+  |  cmp RB, 0x80000000; jz ->fff_fallback
+  |  cmp RB, LJ_TISNUM; jz ->fff_fallback
+  |1:
   |  mov PC, [BASE-4]
   |  mov MULTRES, RD
   |  mov [BASE-4], RB
   |  mov RB, [BASE]
   |  mov [BASE-8], RB
+  |  mov RD, MULTRES
   |  sub RD, 2
   |  jz >2
   |  mov RA, BASE
@@ -3796,23 +3817,51 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_ISTC: case BC_ISFC: case BC_IST: case BC_ISF:
     |  ins_AD	// RA = dst or unused, RD = src, JMP with RD = target
-    |  mov RB, [BASE+RD*8+4]
+    |  mov RB, [BASE+RD*8+4]	// MSW
+    |  mov RD, [BASE+RD*8]	// LSW
     |  add PC, 4
-    |  cmp RB, LJ_TISTRUECOND
+    |  cmp RB, LJ_TFALSE
     if (op == BC_IST || op == BC_ISTC) {
-      |  jae >1
+      |  jae >1			// NIL/FALSE -> False
+      |  test RD, RD
+      |  jnz >3			// LSW != 0 -> True
+      |  test RB, RB		// MSW == 0 -> +0.0 -> False
+      |  jz >1
+      |  cmp RB, 0x80000000	// MSW == 0x80000000 -> -0.0 -> False
+      |  jz >1
+      |  cmp RB, LJ_TISNUM	// MSW == ISNUM -> Integer 0 -> False
+      |  jz >1
+      |3: // True
+      if (op == BC_ISTC) {
+	|  mov [BASE+RA*8+4], RB
+	|  mov [BASE+RA*8], RD
+      }
+      |  movzx RD, PC_RD
+      |  branchPC RD
+      |1: // False
+      |  ins_next
     } else {
-      |  jb >1
+      |  jae >2			// NIL/FALSE -> True
+      |  test RD, RD
+      |  jnz >1			// LSW != 0 -> False
+      |  test RB, RB		// MSW == 0 -> +0.0 -> True
+      |  jz >2
+      |  cmp RB, 0x80000000	// MSW == 0x80000000 -> -0.0 -> True
+      |  jz >2
+      |  cmp RB, LJ_TISNUM	// MSW == ISNUM -> Integer 0 -> True
+      |  jz >2
+      |1: // False
+      |  jmp >3
+      |2: // True
+      if (op == BC_ISFC) {
+	|  mov [BASE+RA*8+4], RB
+	|  mov [BASE+RA*8], RD
+      }
+      |  movzx RD, PC_RD
+      |  branchPC RD
+      |3: // End
+      |  ins_next
     }
-    if (op == BC_ISTC || op == BC_ISFC) {
-      |  mov [BASE+RA*8+4], RB
-      |  mov RB, [BASE+RD*8]
-      |  mov [BASE+RA*8], RB
-    }
-    |  movzx RD, PC_RD
-    |  branchPC RD
-    |1:					// Fallthrough to the next instruction.
-    |  ins_next
     break;
 
   case BC_ISTYPE:
@@ -3844,9 +3893,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_NOT:
     |  ins_AD	// RA = dst, RD = src
-    |  xor RB, RB
-    |  checktp RD, LJ_TISTRUECOND
-    |  adc RB, LJ_TTRUE
+    |  mov RB, [BASE+RD*8+4]
+    |  mov RD, [BASE+RD*8]
+    |  cmp RB, LJ_TFALSE
+    |  jae >1			// NIL/FALSE -> True
+    |  test RD, RD
+    |  jnz >2			// LSW != 0 -> False
+    |  test RB, RB
+    |  jz >1			// MSW == 0 (+0.0) -> True
+    |  cmp RB, 0x80000000
+    |  jz >1			// MSW == 0x80000000 (-0.0) -> True
+    |  cmp RB, LJ_TISNUM
+    |  jz >1			// Integer 0 -> True
+    |2: // False
+    |  mov RB, LJ_TFALSE
+    |  jmp >3
+    |1: // True
+    |  mov RB, LJ_TTRUE
+    |3:
     |  mov [BASE+RA*8+4], RB
     |  ins_next
     break;

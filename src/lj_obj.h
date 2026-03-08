@@ -805,18 +805,22 @@ typedef union GCobj {
 #define tvisint(o)	(LJ_DUALNUM && itype(o) == LJ_TISNUM)
 #define tvisnum(o)	(itype(o) < LJ_TISNUM)
 
-#define tvistruecond(o)	(itype(o) < LJ_TISTRUECOND)
+#define tvistruecond(o)	(itype(o) < LJ_TISTRUECOND && !tviszero(o))
 #define tvispri(o)	(itype(o) >= LJ_TISPRI)
 #define tvistabud(o)	(itype(o) <= LJ_TISTABUD)  /* && !tvisnum() */
 #define tvisgcv(o)	((itype(o) - LJ_TISGCV) > (LJ_TNUMX - LJ_TISGCV))
 
 /* Special macros to test numbers for NaN, +0, -0, +1 and raw equality. */
 #define tvisnan(o)	((o)->n != (o)->n)
-#if LJ_64
-#define tviszero(o)	(((o)->u64 << 1) == 0)
+#if LJ_GC64
+#define tvisnumzero(o)	(((o)->it64 << 1) == 0)
+#elif LJ_64
+#define tvisnumzero(o)	(((o)->u64 << 1) == 0)
 #else
-#define tviszero(o)	(((o)->u32.lo | ((o)->u32.hi << 1)) == 0)
+#define tvisnumzero(o)	(((o)->u32.lo | ((o)->u32.hi << 1)) == 0)
 #endif
+#define tvisintzero(o)	(tvisint(o) && (o)->i == 0)
+#define tviszero(o)	(tvisnumzero(o) || tvisintzero(o))
 #define tvispzero(o)	((o)->u64 == 0)
 #define tvismzero(o)	((o)->u64 == U64x(80000000,00000000))
 #define tvispone(o)	((o)->u64 == U64x(3ff00000,00000000))
