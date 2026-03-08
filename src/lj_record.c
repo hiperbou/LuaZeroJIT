@@ -2425,12 +2425,14 @@ void lj_record_ins(jit_State *J)
   case BC_IST: case BC_ISF:
     if (tref_isnumber(rc)) {
       TRef zero = tref_isint(rc) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
+      int is_true = tvistruecond(&J->L->base[bc_d(ins)]);
       rec_comp_prep(J);
-      emitir(IRTG((op & 1) ? IR_EQ : IR_NE, tref_isint(rc) ? IRT_INT : IRT_NUM), rc, zero);
+      emitir(IRTG(is_true ? IR_NE : IR_EQ, tref_isint(rc) ? IRT_INT : IRT_NUM), rc, zero);
       if (op == BC_ISTC || op == BC_ISFC) {
-	if ((op & 1) == tref_istruecond(rc))
+	if ((op & 1) == is_true)
 	  rc = 0;
       }
+      rec_comp_fixup(J, J->pc, is_true ^ (op & 1));
     } else {
       if (op == BC_ISTC || op == BC_ISFC) {
 	if ((op & 1) == tref_istruecond(rc))
@@ -2458,9 +2460,11 @@ void lj_record_ins(jit_State *J)
   case BC_NOT:
     /* Type specialization already forces const result. */
     if (tref_isnumber(rc)) {
+      int is_true = tvistruecond(&J->L->base[bc_d(ins)]);
       TRef zero = tref_isint(rc) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
-      rc = emitir(IRT(IR_EQ, IRT_INT), rc, zero);
-      /* Result is 1 (True) if equal to zero, 0 (False) otherwise. */
+      rec_comp_prep(J);
+      emitir(IRTG(is_true ? IR_NE : IR_EQ, tref_isint(rc) ? IRT_INT : IRT_NUM), rc, zero);
+      rc = is_true ? TREF_FALSE : TREF_TRUE;
     } else {
       rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
     }

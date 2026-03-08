@@ -813,7 +813,7 @@ typedef union GCobj {
 /* Special macros to test numbers for NaN, +0, -0, +1 and raw equality. */
 #define tvisnan(o)	((o)->n != (o)->n)
 #if LJ_GC64
-#define tvisnumzero(o)	(((o)->it64 << 1) == 0)
+#define tvisnumzero(o)	(((o)->u64 << 1) == 0)
 #elif LJ_64
 #define tvisnumzero(o)	(((o)->u64 << 1) == 0)
 #else

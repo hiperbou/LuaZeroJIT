@@ -1170,25 +1170,35 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_condt:			// BASE = base, RC = result
   |  add PC, 4
-  |  mov RB, [RC+4]
-  |  mov RD, [RC]
-  |  cmp RB, LJ_TFALSE; jae >1
-  |  test RD, RD; jnz <5
-  |  test RB, RB; jz >1
-  |  cmp RB, 0x80000000; jz >1
-  |  cmp RB, LJ_TISNUM; jz >1
+  |  mov RB, [RC+4]		// MSW
+  |  mov RD, [RC]		// LSW
+  |  cmp RB, LJ_TFALSE
+  |  jae >1			// NIL/FALSE -> False
+  |  cmp RB, LJ_TISNUM
+  |  ja <5			// Object -> True
+  |  test RD, RD
+  |  jnz <5			// LSW != 0 -> True
+  |  test RB, 0x7fffffff
+  |  jz >1			// 0.0 or -0.0 -> False
+  |  cmp RB, LJ_TISNUM
+  |  je >1			// Integer 0 -> False
   |  jmp <5
   |1:
   |  jmp <6
   |
   |->cont_condf:			// BASE = base, RC = result
-  |  mov RB, [RC+4]
-  |  mov RD, [RC]
-  |  cmp RB, LJ_TFALSE; jae <4
-  |  test RD, RD; jnz >1
-  |  test RB, RB; jz <4
-  |  cmp RB, 0x80000000; jz <4
-  |  cmp RB, LJ_TISNUM; jz <4
+  |  mov RB, [RC+4]		// MSW
+  |  mov RD, [RC]		// LSW
+  |  cmp RB, LJ_TFALSE
+  |  jae <4			// NIL/FALSE -> True
+  |  cmp RB, LJ_TISNUM
+  |  ja >1			// Object -> False
+  |  test RD, RD
+  |  jnz >1			// LSW != 0 -> False
+  |  test RB, 0x7fffffff
+  |  jz <4			// 0.0 or -0.0 -> True
+  |  cmp RB, LJ_TISNUM
+  |  je <4			// Integer 0 -> True
   |1:
   |  jmp <6
   |
@@ -1468,20 +1478,23 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: checks -----------------------------------------------
   |
   |.ffunc_1 assert
-  |  mov RB, [BASE+4]
-  |  mov RD, [BASE]
-  |  cmp RB, LJ_TFALSE; jae ->fff_fallback
-  |  test RD, RD; jnz >1
-  |  test RB, RB; jz ->fff_fallback
-  |  cmp RB, 0x80000000; jz ->fff_fallback
-  |  cmp RB, LJ_TISNUM; jz ->fff_fallback
+  |  mov RB, [BASE+4]	// MSW
+  |  mov RC, [BASE]	// LSW
+  |  cmp RB, LJ_TFALSE
+  |  jae ->fff_fallback		// NIL/FALSE -> False
+  |  cmp RB, LJ_TISNUM
+  |  ja >1			// Object -> True
+  |  test RC, RC
+  |  jnz >1			// LSW != 0 -> True
+  |  test RB, 0x7fffffff
+  |  jz ->fff_fallback		// 0.0 or -0.0 -> False
+  |  cmp RB, LJ_TISNUM
+  |  je ->fff_fallback		// Integer 0 -> False
   |1:
   |  mov PC, [BASE-4]
   |  mov MULTRES, RD
   |  mov [BASE-4], RB
-  |  mov RB, [BASE]
-  |  mov [BASE-8], RB
-  |  mov RD, MULTRES
+  |  mov [BASE-8], RC
   |  sub RD, 2
   |  jz >2
   |  mov RA, BASE
@@ -3816,52 +3829,42 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC: case BC_IST: case BC_ISF:
-    |  ins_AD	// RA = dst or unused, RD = src, JMP with RD = target
+    |  ins_AD	// RA = dst, RD = src index
     |  mov RB, [BASE+RD*8+4]	// MSW
     |  mov RD, [BASE+RD*8]	// LSW
     |  add PC, 4
     |  cmp RB, LJ_TFALSE
+    |  jae >2			// NIL/FALSE -> False
+    |  cmp RB, LJ_TISNUM
+    |  ja >1			// Object -> True
+    |  test RD, RD
+    |  jnz >1			// LSW != 0 -> True
+    |  test RB, 0x7fffffff
+    |  jz >2			// 0.0 or -0.0 -> False
+    |  cmp RB, LJ_TISNUM
+    |  je >2			// Integer 0 -> False
+    |1: // True
     if (op == BC_IST || op == BC_ISTC) {
-      |  jae >1			// NIL/FALSE -> False
-      |  test RD, RD
-      |  jnz >3			// LSW != 0 -> True
-      |  test RB, RB		// MSW == 0 -> +0.0 -> False
-      |  jz >1
-      |  cmp RB, 0x80000000	// MSW == 0x80000000 -> -0.0 -> False
-      |  jz >1
-      |  cmp RB, LJ_TISNUM	// MSW == ISNUM -> Integer 0 -> False
-      |  jz >1
-      |3: // True
       if (op == BC_ISTC) {
 	|  mov [BASE+RA*8+4], RB
 	|  mov [BASE+RA*8], RD
       }
       |  movzx RD, PC_RD
       |  branchPC RD
-      |1: // False
       |  ins_next
-    } else {
-      |  jae >2			// NIL/FALSE -> True
-      |  test RD, RD
-      |  jnz >1			// LSW != 0 -> False
-      |  test RB, RB		// MSW == 0 -> +0.0 -> True
-      |  jz >2
-      |  cmp RB, 0x80000000	// MSW == 0x80000000 -> -0.0 -> True
-      |  jz >2
-      |  cmp RB, LJ_TISNUM	// MSW == ISNUM -> Integer 0 -> True
-      |  jz >2
-      |1: // False
-      |  jmp >3
-      |2: // True
+    }
+    |  ins_next
+    |2: // False
+    if (op == BC_ISF || op == BC_ISFC) {
       if (op == BC_ISFC) {
 	|  mov [BASE+RA*8+4], RB
 	|  mov [BASE+RA*8], RD
       }
       |  movzx RD, PC_RD
       |  branchPC RD
-      |3: // End
       |  ins_next
     }
+    |  ins_next
     break;
 
   case BC_ISTYPE:
@@ -3893,18 +3896,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_NOT:
     |  ins_AD	// RA = dst, RD = src
-    |  mov RB, [BASE+RD*8+4]
-    |  mov RD, [BASE+RD*8]
+    |  mov RB, [BASE+RD*8+4]	// MSW
+    |  mov RD, [BASE+RD*8]	// LSW
     |  cmp RB, LJ_TFALSE
     |  jae >1			// NIL/FALSE -> True
+    |  cmp RB, LJ_TISNUM
+    |  ja >2			// Object -> False
     |  test RD, RD
     |  jnz >2			// LSW != 0 -> False
-    |  test RB, RB
-    |  jz >1			// MSW == 0 (+0.0) -> True
-    |  cmp RB, 0x80000000
-    |  jz >1			// MSW == 0x80000000 (-0.0) -> True
+    |  test RB, 0x7fffffff
+    |  jz >1			// 0.0 or -0.0 -> True
     |  cmp RB, LJ_TISNUM
-    |  jz >1			// Integer 0 -> True
+    |  je >1			// Integer 0 -> True
     |2: // False
     |  mov RB, LJ_TFALSE
     |  jmp >3

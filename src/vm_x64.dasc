@@ -1221,6 +1221,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jne >1			// Not zero number -> True
   |  test RBd, RBd
   |  jz ->fff_fallback		// Integer 0 -> False
+  |1:
   |  mov PC, [BASE-8]
   |  mov MULTRES, RDd
   |  mov RB, [BASE]
@@ -3228,46 +3229,42 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC: case BC_IST: case BC_ISF:
-    |  ins_AD	// RA = dst or unused, RD = src, JMP with RD = target
-    |  mov ITYPE, [BASE+RD*8]
+    |  ins_AD	// RA = dst or unused, RD = src
+    |  mov RB, [BASE+RD*8]
     |  add PC, 4
-    |  mov RB, ITYPE
+    |  mov ITYPE, RB
     |  sar ITYPE, 47
     |  cmp ITYPEd, LJ_TFALSE
+    |  jae >2			// NIL/FALSE -> False
+    |  mov64 RA, 0x7fffffffffffffff
+    |  and RA, RB
+    |  jz >2			// +0.0 or -0.0 -> False
+    |  mov ITYPE, RB
+    |  sar ITYPE, 47
+    |  cmp ITYPEd, LJ_TISNUM
+    |  jne >1			// Not zero number -> True
+    |  test RBd, RBd
+    |  jz >2			// Integer 0 -> False
+    |1: // True
     if (op == BC_IST || op == BC_ISTC) {
-      |  jae >1			// NIL/FALSE -> False
-      |  mov64 RA, 0x7fffffffffffffff
-      |  and RA, RB
-      |  jz >1			// +0.0 or -0.0 -> False
-      |  cmp ITYPEd, LJ_TISNUM
-      |  jne >3			// Not zero number -> True
-      |  test RBd, RBd
-      |  jz >1			// Integer 0 -> False
-      |3: // True
       if (op == BC_ISTC) {
 	|  movzx RAd, PC_RA
 	|  mov [BASE+RA*8], RB
       }
       |  movzx RDd, PC_RD
       |  branchPC RD
-      |1: // False
-    } else {
-      |  jae >2			// NIL/FALSE -> True
-      |  mov64 RA, 0x7fffffffffffffff
-      |  and RA, RB
-      |  jz >2			// +0.0 or -0.0 -> True
-      |  cmp ITYPEd, LJ_TISNUM
-      |  jne >1			// Not zero number -> False
-      |  test RBd, RBd
-      |  jnz >1			// Integer not zero -> False
-      |2: // True
+      |  ins_next
+    }
+    |  ins_next
+    |2: // False
+    if (op == BC_ISF || op == BC_ISFC) {
       if (op == BC_ISFC) {
 	|  movzx RAd, PC_RA
 	|  mov [BASE+RA*8], RB
       }
       |  movzx RDd, PC_RD
       |  branchPC RD
-      |1: // False
+      |  ins_next
     }
     |  ins_next
     break;
