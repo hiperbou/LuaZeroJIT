@@ -3798,13 +3798,43 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = dst or unused, RD = src, JMP with RD = target
     |  mov RB, [BASE+RD*8+4]
     |  add PC, 4
-    |  cmp RB, LJ_TISTRUECOND
     if (op == BC_IST || op == BC_ISTC) {
+      |  cmp RB, LJ_TISTRUECOND
       |  jae >1
+      |  cmp RB, LJ_TISNUM
+      |  ja >2
+      |  je >4
+      |  mov RC, [BASE+RD*8]
+      |  test RC, RC
+      |  jne >2
+      |  mov RC, [BASE+RD*8+4]
+      |  and RC, 0x7fffffff
+      |  je >1
+      |  jmp >2
+      |4:
+      |  cmp dword [BASE+RD*8], 0
+      |  je >1
+      |2:
     } else {
-      |  jb >1
+      |  cmp RB, LJ_TISTRUECOND
+      |  jae >2
+      |  cmp RB, LJ_TISNUM
+      |  ja >1
+      |  je >4
+      |  mov RC, [BASE+RD*8]
+      |  test RC, RC
+      |  jne >1
+      |  mov RC, [BASE+RD*8+4]
+      |  and RC, 0x7fffffff
+      |  jne >1
+      |  jmp >2
+      |4:
+      |  cmp dword [BASE+RD*8], 0
+      |  jne >1
+      |2:
     }
     if (op == BC_ISTC || op == BC_ISFC) {
+      |  mov RB, [BASE+RD*8+4]
       |  mov [BASE+RA*8+4], RB
       |  mov RB, [BASE+RD*8]
       |  mov [BASE+RA*8], RB
@@ -3844,11 +3874,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_NOT:
     |  ins_AD	// RA = dst, RD = src
-    |  xor RB, RB
-    |  checktp RD, LJ_TISTRUECOND
-    |  adc RB, LJ_TTRUE
-    |  mov [BASE+RA*8+4], RB
+    |  mov RB, [BASE+RD*8+4]
+    |  cmp RB, LJ_TISTRUECOND
+    |  jae >1
+    |  cmp RB, LJ_TISNUM
+    |  ja >2
+    |  je >3
+    |  mov RC, [BASE+RD*8]
+    |  test RC, RC
+    |  jne >2
+    |  mov RC, [BASE+RD*8+4]
+    |  and RC, 0x7fffffff
+    |  jne >2
+    |1:
+    |  mov dword [BASE+RA*8+4], LJ_TTRUE
     |  ins_next
+    |2:
+    |  mov dword [BASE+RA*8+4], LJ_TFALSE
+    |  ins_next
+    |3:
+    |  cmp dword [BASE+RD*8], 0
+    |  jne >2
+    |  jmp <1
     break;
   case BC_UNM:
     |  ins_AD	// RA = dst, RD = src

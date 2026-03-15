@@ -3210,12 +3210,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     if (op == BC_ISTC || op == BC_ISFC) {
       |  mov RB, ITYPE
     }
+    |  mov RC, ITYPE
     |  sar ITYPE, 47
-    |  cmp ITYPEd, LJ_TISTRUECOND
     if (op == BC_IST || op == BC_ISTC) {
+      |  cmp ITYPEd, LJ_TISTRUECOND
       |  jae >1
+      |  shl RC, 1
+      |  je >1
+      |2:
     } else {
-      |  jb >1
+      |  cmp ITYPEd, LJ_TISTRUECOND
+      |  jae >2
+      |  shl RC, 1
+      |  jne >1
+      |2:
     }
     if (op == BC_ISTC || op == BC_ISFC) {
       |  mov [BASE+RA*8], RB
@@ -3251,10 +3259,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_NOT:
     |  ins_AD	// RA = dst, RD = src
     |  mov RB, [BASE+RD*8]
+    |  mov RC, RB
     |  sar RB, 47
+    |  cmp RBd, LJ_TISTRUECOND
+    |  jae >1
+    |  shl RC, 1
+    |  jne >2
+    |1:
     |  mov RCd, 2
-    |  cmp RB, LJ_TISTRUECOND
-    |  sbb RCd, 0
+    |  shl RC, 47
+    |  not RC
+    |  mov [BASE+RA*8], RC
+    |  ins_next
+    |2:
+    |  mov RCd, 1
     |  shl RC, 47
     |  not RC
     |  mov [BASE+RA*8], RC

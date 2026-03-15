@@ -2422,10 +2422,14 @@ void lj_record_ins(jit_State *J)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC:
+    if (tref_isnumber(rc))
+      lj_trace_err(J, LJ_TRERR_NYIBC);
     if ((op & 1) == tref_istruecond(rc))
       rc = 0;  /* Don't store if condition is not true. */
     /* fallthrough */
   case BC_IST: case BC_ISF:  /* Type specialization suffices. */
+    if (tref_isnumber(rc))
+      lj_trace_err(J, LJ_TRERR_NYIBC);
     if (bc_a(pc[1]) < J->maxslot)
       J->maxslot = bc_a(pc[1]);  /* Shrink used slots. */
     break;
@@ -2445,6 +2449,8 @@ void lj_record_ins(jit_State *J)
   /* -- Unary ops --------------------------------------------------------- */
 
   case BC_NOT:
+    if (tref_isnumber(rc))
+      lj_trace_err(J, LJ_TRERR_NYIBC);
     /* Type specialization already forces const result. */
     rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
     break;
