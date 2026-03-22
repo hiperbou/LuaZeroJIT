@@ -98,10 +98,21 @@ local function test_tables()
   check(t2[0] == 0, "Large table indexing with 0")
 end
 
+function test_other()
+  deferred_priority_updates = deferred_priority_updates or {}
+
+  local a = {}
+  deferred_priority_updates[a] = 1
+  check(deferred_priority_updates[a], "Table as key")
+  
+  deferred_priority_updates = nil
+end
+
 local function run_all()
   test_logical()
   test_inheritance()
   test_tables()
+  test_other()
 end
 
 print("--- Interpreter ---")

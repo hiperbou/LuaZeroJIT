@@ -70,8 +70,15 @@ run_all()
 
 print("\nJIT:")
 -- Force JIT
-if jit then
-  jit.opt.start("hotloop=10")
+local ok_jitopt, jitopt = pcall(require, "jit.opt")
+if ok_jitopt and jitopt and type(jitopt.start) == "function" then
+  if jit and type(jit.flush) == "function" then
+    jit.flush()
+  end
+  jitopt.start("hotloop=10")
+  print("INFO: running with JIT enabled")
+else
+  print("SKIP: JIT tuning unavailable; running with JIT disabled")
 end
 run_all()
 
