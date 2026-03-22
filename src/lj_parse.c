@@ -739,11 +739,15 @@ static void bcemit_branch_t(FuncState *fs, ExpDesc *e)
 {
   BCPos pc;
   expr_discharge(fs, e);
-  if (e->k == VKSTR || e->k == VKNUM || e->k == VKTRUE)
+  if (e->k == VKSTR || e->k == VKTRUE)
     pc = NO_JMP;  /* Never jump. */
+  else if (e->k == VKNUM && !tvisnumzero(expr_numtv(e)))
+    pc = NO_JMP;  /* Non-zero number: never jump (always true). */
   else if (e->k == VJMP)
     invertcond(fs, e), pc = e->u.s.info;
   else if (e->k == VKFALSE || e->k == VKNIL)
+    expr_toreg_nobranch(fs, e, NO_REG), pc = bcemit_jmp(fs);
+  else if (e->k == VKNUM)  /* Zero number: always jump (always false). */
     expr_toreg_nobranch(fs, e, NO_REG), pc = bcemit_jmp(fs);
   else
     pc = bcemit_branch(fs, e, 0);
@@ -759,9 +763,13 @@ static void bcemit_branch_f(FuncState *fs, ExpDesc *e)
   expr_discharge(fs, e);
   if (e->k == VKNIL || e->k == VKFALSE)
     pc = NO_JMP;  /* Never jump. */
+  else if (e->k == VKNUM && tvisnumzero(expr_numtv(e)))
+    pc = NO_JMP;  /* Zero number: never jump (always false). */
   else if (e->k == VJMP)
     pc = e->u.s.info;
-  else if (e->k == VKSTR || e->k == VKNUM || e->k == VKTRUE)
+  else if (e->k == VKSTR || e->k == VKTRUE)
+    expr_toreg_nobranch(fs, e, NO_REG), pc = bcemit_jmp(fs);
+  else if (e->k == VKNUM)  /* Non-zero number: always jump (always true). */
     expr_toreg_nobranch(fs, e, NO_REG), pc = bcemit_jmp(fs);
   else
     pc = bcemit_branch(fs, e, 1);
@@ -945,6 +953,9 @@ static void bcemit_unop(FuncState *fs, BCOp op, ExpDesc *e)
     expr_discharge(fs, e);
     if (e->k == VKNIL || e->k == VKFALSE) {
       e->k = VKTRUE;
+      return;
+    } else if (e->k == VKNUM && tvisnumzero(expr_numtv(e))) {
+      e->k = VKTRUE;  /* not 0 / not 0.0 / not -0.0 => true */
       return;
     } else if (expr_isk(e) || (LJ_HASFFI && e->k == VKCDATA)) {
       e->k = VKFALSE;

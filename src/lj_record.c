@@ -2425,10 +2425,29 @@ void lj_record_ins(jit_State *J)
     if ((op & 1) == tref_istruecond(rc))
       rc = 0;  /* Don't store if condition is not true. */
     /* fallthrough */
-  case BC_IST: case BC_ISF:  /* Type specialization suffices. */
+  case BC_IST: case BC_ISF: {
+    /* For number-typed refs, type specialization alone is not enough:
+    ** a number can be zero (falsy) or non-zero (truthy).
+    ** Emit a guard to specialize on the runtime zero/non-zero value. */
+    if (tref_isnumber(rc)) {
+      IRType t = tref_isinteger(rc) ? IRT_INT : IRT_NUM;
+      TRef zero_k = (t == IRT_INT) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
+      /* For IST/ISTC (branch if true): value must be non-zero. */
+      /* For ISF/ISFC (branch if false): value must be zero. */
+      int is_true_branch = (op == BC_IST || op == BC_ISTC);
+      int val_is_truecond = tref_istruecond(rc);  /* non-zero at runtime */
+      if (is_true_branch) {
+        /* Guard: rc != 0 (stay on true-branch trace) */
+        emitir(IRTG(val_is_truecond ? IR_NE : IR_EQ, t), rc, zero_k);
+      } else {
+        /* Guard: rc == 0 (stay on false-branch trace) */
+        emitir(IRTG(val_is_truecond ? IR_NE : IR_EQ, t), rc, zero_k);
+      }
+    }
     if (bc_a(pc[1]) < J->maxslot)
       J->maxslot = bc_a(pc[1]);  /* Shrink used slots. */
     break;
+  }
 
   case BC_ISTYPE: case BC_ISNUM:
     /* These coercions need to correspond with lj_meta_istype(). */
