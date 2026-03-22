@@ -7,6 +7,7 @@
 @set PATH=%W64DEVKIT_BIN%;%PATH%
 
 @cd /d "%~dp0"
+copy /Y Makefile.32bits Makefile
 mingw32-make clean
 mingw32-make amalg HOST_MSYS=mingw CC="gcc -m32 -g" XCFLAGS="-DLUAJIT_DISABLE_GC64 -g"
 @if errorlevel 1 goto :BAD

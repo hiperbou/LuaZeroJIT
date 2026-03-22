@@ -7,6 +7,7 @@
 @set PATH=%W64DEVKIT_BIN%;%PATH%
 
 @cd /d "%~dp0"
+copy /Y Makefile.64bits Makefile
 mingw32-make clean
 mingw32-make amalg
 @if errorlevel 1 goto :BAD
