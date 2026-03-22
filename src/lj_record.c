@@ -2422,28 +2422,19 @@ void lj_record_ins(jit_State *J)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC:
-    if ((op & 1) == tref_istruecond(rc))
-      rc = 0;  /* Don't store if condition is not true. */
-    /* fallthrough */
   case BC_IST: case BC_ISF: {
-    /* For number-typed refs, type specialization alone is not enough:
-    ** a number can be zero (falsy) or non-zero (truthy).
-    ** Emit a guard to specialize on the runtime zero/non-zero value. */
+    int val_is_truecond = !tvisnumzero(&J->L->base[bc_d(ins)]);
+    if (op == BC_ISTC || op == BC_ISFC) {
+      if ((op & 1) == val_is_truecond)
+        rc = 0;  /* Don't store if condition is not true. */
+    }
     if (tref_isnumber(rc)) {
       IRType t = tref_isinteger(rc) ? IRT_INT : IRT_NUM;
       TRef zero_k = (t == IRT_INT) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
-      /* For IST/ISTC (branch if true): value must be non-zero. */
-      /* For ISF/ISFC (branch if false): value must be zero. */
-      int is_true_branch = (op == BC_IST || op == BC_ISTC);
-      int val_is_truecond = tref_istruecond(rc);  /* non-zero at runtime */
-      if (is_true_branch) {
-        /* Guard: rc != 0  (stay on true-branch trace, i.e. value is non-zero) */
-        emitir(IRTG(val_is_truecond ? IR_NE : IR_EQ, t), rc, zero_k);
-      } else {
-        /* Guard: rc == 0  (stay on false-branch trace, i.e. value is zero)
-        ** The IROp is the OPPOSITE of the true-branch arm: NE <-> EQ. */
-        emitir(IRTG(val_is_truecond ? IR_EQ : IR_NE, t), rc, zero_k);
-      }
+      /* Assert that the runtime value maintains its truthiness.
+      ** If truthy trace: assert value is non-zero (IR_NE)
+      ** If falsy trace: assert value is zero (IR_EQ) */
+      emitir(IRTG(val_is_truecond ? IR_NE : IR_EQ, t), rc, zero_k);
     }
     if (bc_a(pc[1]) < J->maxslot)
       J->maxslot = bc_a(pc[1]);  /* Shrink used slots. */
@@ -2472,7 +2463,7 @@ void lj_record_ins(jit_State *J)
     if (tref_isnumber(rc)) {
       IRType t = tref_isinteger(rc) ? IRT_INT : IRT_NUM;
       TRef zero_k = (t == IRT_INT) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
-      int is_zero = !tref_istruecond(rc);  /* runtime value is zero */
+      int is_zero = tvisnumzero(&J->L->base[bc_d(ins)]);  /* runtime value is zero */
       /* Assert that the runtime value matches our zero/non-zero specialization. */
       emitir(IRTG(is_zero ? IR_EQ : IR_NE, t), rc, zero_k);
       rc = is_zero ? TREF_TRUE : TREF_FALSE;

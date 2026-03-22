@@ -56,10 +56,28 @@ for _, x in ipairs(test_numbers) do
   )
 end
 
+-- -- Feature: zero-is-false, Property 6: Interpreter/JIT consistency
+local baseline = {}
+for _, x in ipairs(test_numbers) do
+  baseline[x] = bool_result(x)
+end
+for i = 1, 250 do
+  for _, x in ipairs(test_numbers) do
+    local res = bool_result(x)
+    if res ~= baseline[x] then
+       print("MISMATCH! iter="..i.." val="..tostring(x).." type="..type(x).." interp_baseline="..tostring(baseline[x]).." jit_res="..tostring(res))
+    end
+    check(
+      res == baseline[x],
+      "Property 6: JIT/interpreter mismatch for: " .. tostring(x)
+    )
+  end
+end
+
 if fails > 0 then
   print(fails .. " PROPERTY TESTS FAILED")
   os.exit(1)
 else
-  print("ALL PROPERTY TESTS PASSED (Properties 1, 2, 4, 5)")
+  print("ALL PROPERTY TESTS PASSED (Properties 1, 2, 4, 5, 6)")
   os.exit(0)
 end
