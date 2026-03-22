@@ -2437,11 +2437,12 @@ void lj_record_ins(jit_State *J)
       int is_true_branch = (op == BC_IST || op == BC_ISTC);
       int val_is_truecond = tref_istruecond(rc);  /* non-zero at runtime */
       if (is_true_branch) {
-        /* Guard: rc != 0 (stay on true-branch trace) */
+        /* Guard: rc != 0  (stay on true-branch trace, i.e. value is non-zero) */
         emitir(IRTG(val_is_truecond ? IR_NE : IR_EQ, t), rc, zero_k);
       } else {
-        /* Guard: rc == 0 (stay on false-branch trace) */
-        emitir(IRTG(val_is_truecond ? IR_NE : IR_EQ, t), rc, zero_k);
+        /* Guard: rc == 0  (stay on false-branch trace, i.e. value is zero)
+        ** The IROp is the OPPOSITE of the true-branch arm: NE <-> EQ. */
+        emitir(IRTG(val_is_truecond ? IR_EQ : IR_NE, t), rc, zero_k);
       }
     }
     if (bc_a(pc[1]) < J->maxslot)
@@ -2464,8 +2465,21 @@ void lj_record_ins(jit_State *J)
   /* -- Unary ops --------------------------------------------------------- */
 
   case BC_NOT:
-    /* Type specialization already forces const result. */
-    rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
+    /* For number-typed refs, type specialization is not enough:
+    ** a number can be zero (falsy => NOT yields true) or non-zero (truthy => NOT yields false).
+    ** Emit a guard on the runtime value and specialise the boolean constant accordingly.
+    ** When the guard fails the trace exits to the interpreter, which is already correct. */
+    if (tref_isnumber(rc)) {
+      IRType t = tref_isinteger(rc) ? IRT_INT : IRT_NUM;
+      TRef zero_k = (t == IRT_INT) ? lj_ir_kint(J, 0) : lj_ir_knum_zero(J);
+      int is_zero = !tref_istruecond(rc);  /* runtime value is zero */
+      /* Assert that the runtime value matches our zero/non-zero specialization. */
+      emitir(IRTG(is_zero ? IR_EQ : IR_NE, t), rc, zero_k);
+      rc = is_zero ? TREF_TRUE : TREF_FALSE;
+    } else {
+      /* Non-number types: type specialization forces the result already. */
+      rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
+    }
     break;
 
   case BC_LEN:
