@@ -8,7 +8,7 @@
 
 @cd /d "%~dp0"
 mingw32-make clean
-mingw32-make amalg XCFLAGS="-DLUAJIT_DISABLE_JIT"
+mingw32-make amalg HOST_MSYS=mingw XCFLAGS="-DLUAJIT_DISABLE_JIT"
 @if errorlevel 1 goto :BAD
 
 @echo.
