@@ -8,7 +8,7 @@
 
 @cd /d "%~dp0"
 copy /Y Makefile.32bits Makefile
-mingw32-make clean
+call w64clean.bat
 mingw32-make amalg HOST_MSYS=mingw CC="gcc -m32 -g" XCFLAGS="-DLUAJIT_DISABLE_GC64 -g"
 @if errorlevel 1 goto :BAD
 

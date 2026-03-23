@@ -5,6 +5,19 @@ Check here before inventing a new command. Update when a new command is confirme
 
 ---
 
+## Clean command
+
+Run this before any build to guarantee a fresh compile (the `mingw32-make clean` target fails in bash because it uses `del`):
+
+```bat
+.\src\w64clean.bat
+```
+
+This deletes all `.o`, `.exe`, `.dll`, `.a`, generated headers, and `host/` artifacts from `src/`.
+The build scripts now call it automatically, so you only need this manually if you want to clean without building.
+
+---
+
 ## Build commands
 
 Each build script must be called from the repo root. They `cd` internally to `src/`.

@@ -3804,10 +3804,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       // Number: secondary zero-value check.
       // A numeric zero must NOT branch (treat as false).
       |.if X64
-      |  mov RBa, [BASE+RD*8]	// Load full 64-bit TValue slot.
-      |  shl RBa, 1		// (slot << 1) == 0 iff value is +-0.0
-      |  jz >1			// zero -> no branch
-      |  mov RB, [BASE+RD*8+4]	// Restore RB = type tag for ISTC copy.
+      |  cmp dword [BASE+RD*8], 0	// Check lo word.
+      |  jne >2			// lo != 0 -> not zero, take branch.
+      |  cmp RB, LJ_TISNUM	// Integer zero: tag == LJ_TISNUM && lo == 0.
+      |  je >1			// Integer zero -> no branch.
+      |  test RB, 0x7fffffff	// Double +-0.0: hi & 0x7fffffff == 0.
+      |  jz >1			// Double zero -> no branch.
+      |2:
       |.else
       |  cmp dword [BASE+RD*8], 0	// Check lo word.
       |  jne >2			// lo != 0 -> not zero, take branch.
@@ -3825,10 +3828,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       // Number: secondary zero-value check.
       // A numeric zero must branch (treat as false).
       |.if X64
-      |  mov RBa, [BASE+RD*8]	// Load full 64-bit TValue slot.
-      |  shl RBa, 1		// (slot << 1) == 0 iff value is +-0.0
-      |  jnz >1			// non-zero -> no branch
-      |  mov RB, [BASE+RD*8+4]	// Restore RB = type tag for ISFC copy.
+      |  cmp dword [BASE+RD*8], 0	// Check lo word.
+      |  jne >1			// lo != 0 -> not zero, no branch.
+      |  cmp RB, LJ_TISNUM	// Integer zero: tag == LJ_TISNUM && lo == 0.
+      |  je >2			// Integer zero -> take branch.
+      |  test RB, 0x7fffffff	// Double +-0.0: hi & 0x7fffffff == 0.
+      |  jnz >1			// Double non-zero -> no branch.
       |.else
       |  cmp dword [BASE+RD*8], 0	// Check lo word.
       |  jne >1			// lo != 0 -> not zero, no branch.
@@ -3887,10 +3892,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RB, LJ_TFALSE
     |  jne >1			// nil/false result -> skip zero check.
     |.if X64
-    |  mov RBa, [BASE+RD*8]	// Load full 64-bit TValue slot.
-    |  shl RBa, 1		// (slot << 1) == 0 iff value is +-0.0
-    |  mov RB, LJ_TFALSE	// Restore result (may be overridden below).
-    |  jnz >1			// non-zero number -> keep LJ_TFALSE.
+    |  cmp dword [BASE+RD*8], 0	// Check lo word.
+    |  jne >1			// lo != 0 -> not zero, keep LJ_TFALSE (RB already set).
+    |  cmp dword [BASE+RD*8+4], LJ_TISNUM  // Integer zero: tag == LJ_TISNUM.
+    |  je >2			// Integer zero -> override to LJ_TTRUE.
+    |  test dword [BASE+RD*8+4], 0x7fffffff  // Double +-0.0: hi & 0x7fffffff == 0.
+    |  jnz >1			// Double non-zero -> keep LJ_TFALSE (RB already set).
+    |2:
     |  mov RB, LJ_TTRUE		// zero -> NOT(0) = true.
     |.else
     |  cmp dword [BASE+RD*8], 0	// Check lo word.
