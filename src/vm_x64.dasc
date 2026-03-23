@@ -939,18 +939,35 @@ static void build_subroutines(BuildCtx *ctx)
   |->cont_condt:			// BASE = base, RC = result
   |  endbr
   |  add PC, 4
-  |  mov ITYPE, [RC]
+  |  mov RB, [RC]
+  |  mov ITYPE, RB
   |  sar ITYPE, 47
-  |  cmp ITYPEd, LJ_TISTRUECOND		// Branch if result is true.
-  |  jb <5
+  |  cmp ITYPEd, LJ_TFALSE; jae >1
+  |  mov64 RA, 0x7fffffffffffffff
+  |  and RA, RB
+  |  jz >1			// +0.0 or -0.0 -> False
+  |  cmp ITYPEd, LJ_TISNUM
+  |  jne <5			// Not zero number -> True
+  |  test RBd, RBd
+  |  jnz <5			// Integer not zero -> True
+  |1:
   |  jmp <6
   |
   |->cont_condf:			// BASE = base, RC = result
   |  endbr
-  |  mov ITYPE, [RC]
+  |  mov RB, [RC]
+  |  mov ITYPE, RB
   |  sar ITYPE, 47
-  |  cmp ITYPEd, LJ_TISTRUECOND		// Branch if result is false.
-  |  jmp <4
+  |  cmp ITYPEd, LJ_TFALSE; jae <4
+  |  mov64 RA, 0x7fffffffffffffff
+  |  and RA, RB
+  |  jz <4			// +0.0 or -0.0 -> False
+  |  cmp ITYPEd, LJ_TISNUM
+  |  jne >1			// Not zero number -> True
+  |  test RBd, RBd
+  |  jz <4			// Integer 0 -> False
+  |1:
+  |  jmp <6
   |
   |->vmeta_equal:
   |  cleartp TAB:RD
@@ -1193,10 +1210,18 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: checks -----------------------------------------------
   |
   |.ffunc_1 assert
-  |  mov ITYPE, [BASE]
-  |  mov RB, ITYPE
+  |  mov RB, [BASE]
+  |  mov ITYPE, RB
   |  sar ITYPE, 47
-  |  cmp ITYPEd, LJ_TISTRUECOND; jae ->fff_fallback
+  |  cmp ITYPEd, LJ_TFALSE; jae ->fff_fallback
+  |  mov64 RA, 0x7fffffffffffffff
+  |  and RA, RB
+  |  jz ->fff_fallback		// +0.0 or -0.0 -> False
+  |  cmp ITYPEd, LJ_TISNUM
+  |  jne >1			// Not zero number -> True
+  |  test RBd, RBd
+  |  jz ->fff_fallback		// Integer 0 -> False
+  |1:
   |  mov PC, [BASE-8]
   |  mov MULTRES, RDd
   |  mov RB, [BASE]
@@ -3204,25 +3229,39 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   /* -- Unary test and copy ops ------------------------------------------- */
 
   case BC_ISTC: case BC_ISFC: case BC_IST: case BC_ISF:
-    |  ins_AD	// RA = dst or unused, RD = src, JMP with RD = target
-    |  mov ITYPE, [BASE+RD*8]
+    |  ins_AD	// RA = dst or unused, RD = src
+    |  mov RB, [BASE+RD*8]
     |  add PC, 4
-    if (op == BC_ISTC || op == BC_ISFC) {
-      |  mov RB, ITYPE
-    }
+    |  mov ITYPE, RB
     |  sar ITYPE, 47
-    |  cmp ITYPEd, LJ_TISTRUECOND
+    |  cmp ITYPEd, LJ_TFALSE
+    |  jae >5			// NIL/FALSE -> falsy
+    |  mov64 ITYPE, 0x7fffffffffffffff
+    |  and ITYPE, RB
+    |  jz >5			// +0.0 or -0.0 -> falsy
+    |  mov ITYPE, RB
+    |  sar ITYPE, 47
+    |  cmp ITYPEd, LJ_TISNUM
+    |  jne >4			// Not zero number -> truthy
+    |  test RBd, RBd
+    |  jz >5			// Integer 0 -> falsy
+    |4: // truthy
     if (op == BC_IST || op == BC_ISTC) {
-      |  jae >1
-    } else {
-      |  jb >1
+      |  jmp >1
     }
+    |  ins_next
+    |5: // falsy
+    if (op == BC_ISF || op == BC_ISFC) {
+      |  jmp >1
+    }
+    |  ins_next
+    |1: // condition met
     if (op == BC_ISTC || op == BC_ISFC) {
+      |  movzx RAd, PC_RA
       |  mov [BASE+RA*8], RB
     }
     |  movzx RDd, PC_RD
     |  branchPC RD
-    |1:					// Fallthrough to the next instruction.
     |  ins_next
     break;
 
@@ -3252,12 +3291,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = dst, RD = src
     |  mov RB, [BASE+RD*8]
     |  sar RB, 47
-    |  mov RCd, 2
-    |  cmp RB, LJ_TISTRUECOND
-    |  sbb RCd, 0
-    |  shl RC, 47
-    |  not RC
-    |  mov [BASE+RA*8], RC
+    |  cmp RBd, LJ_TFALSE
+    |  jae >1			// NIL/FALSE -> True
+    |  mov64 ITYPE, 0x7fffffffffffffff
+    |  and ITYPE, [BASE+RD*8]
+    |  jz >1			// +0.0 or -0.0 -> True
+    |  cmp RBd, LJ_TISNUM
+    |  jne >2			// Not zero number -> False
+    |  mov RB, [BASE+RD*8]
+    |  test RBd, RBd
+    |  jz >1			// Integer 0 -> True
+    |2: // False
+    |  mov_false RB
+    |  jmp >3
+    |1: // True
+    |  mov_true RB
+    |3:
+    |  mov [BASE+RA*8], RB
     |  ins_next
     break;
   case BC_UNM:
